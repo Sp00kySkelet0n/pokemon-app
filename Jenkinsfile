@@ -1,25 +1,45 @@
 pipeline {
-    agent { label 'dind' }
+    agent none
 
     stages {
-        stage('Build') {
+        stage('Checkout') {
+            agent { label 'dind' }
             steps {
-                echo 'Building on a labeled node...'
-                // Insert your build steps here
+                sh 'ls -lanh'
+            }
+        }
+        stage('Build') {
+            agent { label 'dind' }
+            steps {
+                sh 'docker build . -t supercoolaccount/pokemon-app:latest'
+                sh 'docker build . -t pytest -f test.Dockerfile'
             }
         }
 
         stage('Test') {
+            agent { label 'dind' }
             steps {
-                echo 'Running tests...'
-                // Insert your test steps here
+                sh 'docker build -t test-pokedex -f test.Dockerfile .'
+                sh 'docker run test-pokedex'
             }
         }
 
-        stage('Deploy') {
+        stage('Push') {
+            agent { label 'dind' }
             steps {
-                echo 'Deploying application...'
-                // Insert your deploy steps here
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh """
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    """
+                }
+                echo 'push application...'
+                sh "docker push supercoolaccount/pokemon-app:latest"
+            }
+        }
+        stage('Deploy') {
+            agent { label 'cloud_agent' }
+            steps {
+                sh 'sudo docker run -d -p 5000:5000 supercoolaccount/pokemon-app:latest'
             }
         }
     }
